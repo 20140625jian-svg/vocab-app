@@ -171,13 +171,15 @@
     <div class="box">
       <h1>Vocab. App</h1>
       <form id="loginForm" class="card" style="display:grid;gap:10px;text-align:left">
-        <h2 style="margin:0">닉네임을 정해 주세요</h2>
-        <input id="nick" maxlength="12" placeholder="닉네임 (1~12글자)" required autocomplete="off">
-        <button type="submit">시작하기</button>
+        <h2 style="margin:0" id="loginTitle">로그인 / 가입</h2>
+        <input id="nick" maxlength="12" placeholder="닉네임 (1~12글자)" required autocomplete="username">
+        <input id="pw" type="password" minlength="4" placeholder="비밀번호 (4글자 이상)" required autocomplete="current-password">
+        <input id="pw2" type="password" minlength="4" placeholder="비밀번호 한 번 더" autocomplete="new-password" hidden>
+        <button type="submit" id="loginBtn">로그인</button>
         <div class="err" id="loginErr" style="color:#dc2626;min-height:1.2em;margin:0"></div>
       </form>
       <div class="known" id="known"></div>
-      <p class="hint">이미 만든 닉네임을 쓰면 그 계정으로 로그인돼요. 비밀번호는 없어요.</p>
+      <p class="hint">처음 쓰는 닉네임이면 새 계정이 만들어져요. 계정마다 단어장과 점수가 따로 저장돼요.<br>비밀번호는 이 기기에만 저장돼서 잊어버리면 찾을 수 없어요.</p>
     </div>
   </div>
 
@@ -213,6 +215,7 @@
   <main class="page" id="page-list">
     <section class="card">
       <h2>단어장 <small id="count">0개</small></h2>
+      <input id="search" type="search" placeholder="🔍 단어나 뜻으로 검색" autocomplete="off" style="margin-bottom:8px">
       <ul id="list"></ul>
     </section>
   </main>
@@ -257,8 +260,10 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const KEY = 'vocab-words';
-    let words = load();
+    const KEY = 'vocab-words';                 // 예전 버전의 공용 단어장 (계정별로 나누기 전)
+    const LEGACY_CLAIMED = 'vocab-legacy-claimed';
+    const legacyWords = load();
+    let words = [];                              // 로그인한 계정의 단어장
     let current = null;
     let score = { right: 0, total: 0 };
 
@@ -287,7 +292,7 @@
 
     function save(showMsg) {
       try {
-        localStorage.setItem(KEY, JSON.stringify(words));
+        if (user && profiles[user]) profiles[user].words = words;
         localStorage.setItem(PKEY, JSON.stringify(profiles));
         if (user) localStorage.setItem(CKEY, user);
         if (showMsg) toast('저장했어요 ✓');
@@ -315,6 +320,33 @@
     let profiles = loadProfiles();
     let user = null;
     try { const c = localStorage.getItem(CKEY); if (c && profiles[c]) user = c; } catch {}
+
+    // 로그인한 계정의 단어장을 꺼내요. 예전(공용) 단어장은 처음 로그인한 계정이 이어받아요.
+    function enterAccount() {
+      const p = me();
+      if (!Array.isArray(p.words)) {
+        let claimed = null;
+        try { claimed = localStorage.getItem(LEGACY_CLAIMED); } catch {}
+        if (!claimed && legacyWords.length) {
+          p.words = legacyWords.map(x => ({ ...x }));
+          try { localStorage.setItem(LEGACY_CLAIMED, user); } catch {}
+        } else p.words = [];
+      }
+      words = p.words;
+      current = null;
+    }
+
+    // 비밀번호는 그대로 저장하지 않고 암호화(해시)해서 저장해요
+    async function hashPw(pw, salt) {
+      const text = salt + ':' + pw;
+      if (window.crypto && crypto.subtle) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+        return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      let h = 5381;                                        // crypto를 못 쓰는 환경용 대체
+      for (const ch of text) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+      return 'x' + h.toString(16);
+    }
 
     function loadProfiles() {
       try {
@@ -376,62 +408,97 @@
       el.append(out);
     }
 
+    const findNick = (nick) => Object.keys(profiles).find(n => n.toLowerCase() === nick.toLowerCase());
+    const cleanNick = (s) => s.trim().replace(/\s+/g, ' ');
+
+    // 처음 쓰는 닉네임이면 "비밀번호 한 번 더" 칸을 보여줘요
+    function updateLoginMode() {
+      const nick = cleanNick($('nick').value);
+      const known = nick && findNick(nick);
+      const p = known && profiles[known];
+      const noPw = p && !p.pw;                         // 비밀번호 없이 만들어진 예전 계정
+      const isNew = nick && !known;
+      $('pw2').hidden = !(isNew || noPw);
+      $('pw2').required = !!(isNew || noPw);
+      $('pw').autocomplete = (isNew || noPw) ? 'new-password' : 'current-password';
+      $('loginTitle').textContent = isNew ? '새 계정 만들기' : noPw ? '비밀번호를 새로 정해 주세요' : '로그인';
+      $('loginBtn').textContent = isNew ? '가입하고 시작하기' : noPw ? '비밀번호 정하고 시작하기' : '로그인';
+    }
+    $('nick').addEventListener('input', updateLoginMode);
+
     function showLogin() {
       $('login').classList.add('on');
       $('loginErr').textContent = '';
+      $('pw').value = ''; $('pw2').value = '';
       const known = $('known');
       known.innerHTML = '';
       Object.keys(profiles).forEach(n => {
         const b = document.createElement('button');
         b.type = 'button'; b.textContent = n;
-        b.onclick = () => login(n);
+        b.onclick = () => { $('nick').value = n; updateLoginMode(); $('pw').focus(); };
         known.append(b);
       });
+      updateLoginMode();
       $('nick').focus();
     }
 
-    async function login(nick) {
-      nick = nick.trim().replace(/\s+/g, ' ');
-      if (!nick) return;
-      // 대소문자만 다른 닉네임은 같은 계정으로 취급
-      const existing = Object.keys(profiles).find(n => n.toLowerCase() === nick.toLowerCase());
-      let id = existing && profiles[existing].id;
-      if (!existing) {
-        id = newId();
+    async function login(nickInput, pw, pw2) {
+      const err = (msg) => { $('loginErr').textContent = msg; };
+      err('');
+      let nick = cleanNick(nickInput);
+      if (!nick) return err('닉네임을 입력해 주세요.');
+      if (pw.length < 4) return err('비밀번호는 4글자 이상이어야 해요.');
+
+      const existing = findNick(nick);            // 대소문자만 다른 닉네임은 같은 계정이에요
+      let isNew = !existing;
+
+      if (existing) {
+        nick = existing;
+        const p = profiles[nick];
+        if (p.pw) {
+          if (await hashPw(pw, p.salt) !== p.pw) return err('비밀번호가 맞지 않아요.');
+        } else {
+          if (pw !== pw2) return err('비밀번호 두 칸이 서로 달라요.');
+          p.salt = newId(); p.pw = await hashPw(pw, p.salt);
+        }
+      } else {
+        if (pw !== pw2) return err('비밀번호 두 칸이 서로 달라요.');
+        const id = newId();
         if (DB_URL) {
           try {
             const taken = await remoteGet('ranking/' + rkey(nick));
-            if (taken && taken.owner !== id) {
-              $('loginErr').textContent = '이미 다른 친구가 쓰고 있는 닉네임이에요. 다른 닉네임을 써 주세요.';
-              return;
-            }
+            if (taken && taken.owner !== id) return err('이미 다른 친구가 쓰고 있는 닉네임이에요. 다른 닉네임을 써 주세요.');
           } catch { /* 서버에 못 닿으면 일단 진행해요 */ }
         }
+        const salt = newId();
+        profiles[nick] = { points: 0, exp: 0, id, salt, pw: await hashPw(pw, salt) };   // 단어장은 enterAccount에서 정해요
       }
-      if (existing) nick = existing;
-      else profiles[nick] = { points: 0, exp: 0, id };
-      if (!profiles[nick].id) profiles[nick].id = id || newId();
+      if (!profiles[nick].id) profiles[nick].id = newId();
+
       user = nick;
+      enterAccount();
       save();
       $('login').classList.remove('on');
-      renderMe(); renderShop(); renderRank();
+      $('pw').value = ''; $('pw2').value = ''; $('nick').value = '';
+      renderMe(); renderList(); renderShop(); renderRank();
+      route();
       pushRank();
-      toast(existing ? nick + '님 다시 오셨네요!' : nick + '님 환영해요!');
+      toast(isNew ? nick + '님 환영해요!' : nick + '님 다시 오셨네요!');
     }
 
     function logout() {
+      save();
       user = null;
+      words = []; current = null;
+      $('search').value = '';
       try { localStorage.removeItem(CKEY); } catch {}
-      renderMe();
+      renderMe(); renderList();
       showLogin();
     }
 
     $('loginForm').onsubmit = (e) => {
       e.preventDefault();
-      const nick = $('nick').value.trim();
-      if (!nick) { $('loginErr').textContent = '닉네임을 입력해 주세요.'; return; }
-      login(nick);
-      $('nick').value = '';
+      login($('nick').value, $('pw').value, $('pw2').value);
     };
 
     /* ---------- 상점 / 알 ---------- */
@@ -520,7 +587,8 @@
     $('saveBtn').onclick = () => save(true);
 
     $('exportBtn').onclick = () => {
-      const blob = new Blob([JSON.stringify({ words, profiles }, null, 2)], { type: 'application/json' });
+      save();
+      const blob = new Blob([JSON.stringify({ profiles }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = '단어장.json';
@@ -534,25 +602,39 @@
       if (!file) return;
       try {
         const raw = JSON.parse(await file.text());
-        const data = Array.isArray(raw) ? raw : raw.words;   // 예전 파일(목록만)도 읽어요
-        const valid = data.filter(x => x && typeof x.word === 'string' && typeof x.meaning === 'string');
-        if (!valid.length) throw new Error();
-        words = valid;
+        const okWord = (x) => x && typeof x.word === 'string' && typeof x.meaning === 'string';
+        const keyOf = (x) => x.word + '\u0000' + x.meaning;
+        // 이미 있는 단어는 건너뛰고 새 단어만 더해요
+        const merge = (a, b) => { const seen = new Set(a.map(keyOf)); return [...a, ...b.filter(x => okWord(x) && !seen.has(keyOf(x)))]; };
+        const before = words.length;
+        let found = false;
+
+        if (Array.isArray(raw) || Array.isArray(raw.words)) {      // 예전 파일(단어 목록만)은 지금 계정에 더해요
+          const list = (Array.isArray(raw) ? raw : raw.words).filter(okWord);
+          if (list.length) { words = merge(words, list); found = true; }
+        }
         if (!Array.isArray(raw) && raw.profiles && typeof raw.profiles === 'object') {
           for (const [n, p] of Object.entries(raw.profiles)) {
             if (!p || !Number.isFinite(p.points) || !Number.isFinite(p.exp)) continue;
+            found = true;
+            const theirs = Array.isArray(p.words) ? p.words : [];
             const mine = profiles[n];
-            // 같은 닉네임이면 더 많이 모은 쪽을 남겨요
-            profiles[n] = mine
-              ? { ...mine, points: Math.max(mine.points, p.points), exp: Math.max(mine.exp, p.exp), id: mine.id || p.id || newId() }
-              : { points: p.points, exp: p.exp, id: p.id || newId() };
+            if (mine) {
+              // 같은 닉네임이면 더 많이 모은 쪽을 남기고, 단어는 합쳐요
+              if (n === user) words = merge(words, theirs); else mine.words = merge(mine.words || [], theirs);
+              Object.assign(mine, { points: Math.max(mine.points, p.points), exp: Math.max(mine.exp, p.exp),
+                id: mine.id || p.id || newId(), pw: mine.pw || p.pw, salt: mine.salt || p.salt });
+            } else {
+              profiles[n] = { points: p.points, exp: p.exp, id: p.id || newId(), pw: p.pw, salt: p.salt, words: merge([], theirs) };
+            }
           }
           renderMe(); renderRank();
         }
+        if (!found) throw new Error();
         save();
         current = null;
         renderList();
-        toast(valid.length + '개 단어를 불러왔어요');
+        toast(`불러왔어요 (지금 계정에 단어 ${words.length - before}개 추가)`);
       } catch {
         toast('단어장 파일이 아니에요');
       }
@@ -594,11 +676,20 @@
     function renderList() {
       const list = $('list');
       list.innerHTML = '';
-      $('count').textContent = words.length + '개';
+      // 검색: 띄어쓰기·대소문자 상관없이 단어나 뜻에 들어 있으면 보여줘요
+      const norm = (s) => s.toLowerCase().replace(/\s+/g, '');
+      const q = norm($('search').value);
+      const shown = words.map((item, i) => ({ item, i }))
+        .filter(({ item }) => !q || norm(item.word).includes(q) || norm(item.meaning).includes(q));
+      $('count').textContent = q ? `검색 결과 ${shown.length}개 / 전체 ${words.length}개` : words.length + '개';
       if (!words.length) {
         list.innerHTML = '<li class="empty">아직 단어가 없어요. 위의 "추가"에서 넣어 보세요.</li>';
+      } else if (!shown.length) {
+        const li = document.createElement('li'); li.className = 'empty';
+        li.textContent = `"${$('search').value.trim()}"(이)가 들어간 단어가 없어요.`;
+        list.append(li);
       }
-      words.forEach((item, i) => {
+      shown.forEach(({ item, i }) => {
         const li = document.createElement('li');
         const w = document.createElement('span'); w.className = 'w'; w.textContent = item.word;
         const m = document.createElement('span'); m.className = 'm'; m.textContent = item.meaning;
@@ -742,6 +833,8 @@
     }
 
     $('rankRefresh').onclick = renderRank;
+    $('search').addEventListener('input', renderList);
+    if (user) enterAccount();          // 새로고침·업데이트 뒤에도 로그인한 계정의 단어장을 다시 꺼내요
     renderList();
     renderMe();
     route();
