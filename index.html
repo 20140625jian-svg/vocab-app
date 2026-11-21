@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>단어장</title>
+  <style>
+    :root {
+      --bg: #faf7f2;
+      --fg: #1f1d1a;
+      --accent: #c2410c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #171614;
+        --fg: #f3efe8;
+        --accent: #fb923c;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", system-ui, sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+    }
+    h1 {
+      font-size: clamp(4rem, 18vw, 14rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      text-align: center;
+    }
+    h1::after {
+      content: "";
+      display: block;
+      width: 0.6em;
+      height: 0.08em;
+      margin: 0.25em auto 0;
+      background: var(--accent);
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body>
+  <h1>단어장</h1>
+</body>
+</html>
