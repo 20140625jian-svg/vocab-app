@@ -146,6 +146,7 @@
     .result.good { color: var(--good); }
     .result.bad { color: var(--bad); }
     .score { text-align: center; color: var(--muted); margin-top: 6px; }
+    .ver { max-width: 640px; margin: 28px auto 0; text-align: center; color: #93c5fd; font-size: .8rem; }
     .toast {
       position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
       background: #0f172a; color: #fff; padding: 10px 18px; border-radius: 999px;
@@ -252,6 +253,7 @@
     </section>
   </main>
 
+  <p class="ver">메뉴가 예전 그대로면 Cmd+Shift+R (윈도우: Ctrl+Shift+R)로 새로고침해 주세요 · 업데이트 2026-11-21</p>
   <div class="toast" id="toast"></div>
 
   <script>
@@ -572,6 +574,22 @@
       $('word').focus();
     };
 
+    /* ---------- 발음 듣기 ---------- */
+    function speak(text) {
+      if (!('speechSynthesis' in window)) return toast('이 브라우저는 소리 읽기를 지원하지 않아요');
+      const say = text.replace(/\(.*?\)|\[.*?\]/g, '').trim() || text;   // 괄호 속 한자 등은 빼고 읽어요
+      const lang = /[가-힣]/.test(say) ? 'ko-KR' : 'en-US';
+      const u = new SpeechSynthesisUtterance(say);
+      u.lang = lang;
+      u.rate = 0.9;
+      const voice = speechSynthesis.getVoices().find(v => v.lang === lang) ||
+                    speechSynthesis.getVoices().find(v => v.lang.startsWith(lang.slice(0, 2)));
+      if (voice) u.voice = voice;
+      speechSynthesis.cancel();
+      speechSynthesis.speak(u);
+    }
+    if ('speechSynthesis' in window) speechSynthesis.getVoices();   // 목소리 목록을 미리 불러와요
+
     /* ---------- 단어장 목록 / 삭제 ---------- */
     function renderList() {
       const list = $('list');
@@ -584,13 +602,16 @@
         const li = document.createElement('li');
         const w = document.createElement('span'); w.className = 'w'; w.textContent = item.word;
         const m = document.createElement('span'); m.className = 'm'; m.textContent = item.meaning;
+        const sp = document.createElement('button'); sp.className = 'del speak'; sp.textContent = '🔊';
+        sp.title = '발음 듣기'; sp.setAttribute('aria-label', item.word + ' 발음 듣기');
+        sp.onclick = () => speak(item.word);
         const del = document.createElement('button'); del.className = 'del'; del.textContent = '삭제';
         del.onclick = () => {
           words.splice(i, 1);
           save();
           renderList();
         };
-        li.append(w, m, del);
+        li.append(w, m, sp, del);
         list.append(li);
       });
     }
@@ -661,6 +682,7 @@
       quiz.innerHTML = `
         <p class="qnum" id="qnum"></p>
         <div class="quiz-word"></div>
+        <div style="text-align:center;margin-bottom:6px"><button class="ghost" id="speakBtn" type="button">🔊 발음 듣기</button></div>
         <p class="quiz-ask">이 단어의 뜻은 무엇일까요?</p>
         <form class="answer" id="answerForm">
           <input id="answer" placeholder="여기에 뜻을 써서 대답하세요" autocomplete="off">
@@ -676,6 +698,7 @@
         </div>
         <div class="score" id="score"></div>`;
       quiz.querySelector('.quiz-word').textContent = current.word;
+      $('speakBtn').onclick = () => speak(current.word);
       $('qnum').textContent = '문제 ' + (score.total + 1);
       updateScore();
       $('answer').focus();
