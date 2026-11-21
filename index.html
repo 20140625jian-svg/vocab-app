@@ -243,9 +243,12 @@
   <!-- 랭킹 -->
   <main class="page" id="page-rank">
     <section class="card">
-      <h2>경험치 랭킹 <small>이 브라우저의 계정</small></h2>
+      <h2>경험치 랭킹 <small id="rankScope"></small></h2>
       <ol class="rank" id="rankList"></ol>
-      <p class="note">같은 브라우저에서 만든 닉네임끼리 순위가 나와요.</p>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <button class="ghost" id="rankRefresh" type="button">새로고침</button>
+        <span class="note" id="rankNote" style="margin:0"></span>
+      </div>
     </section>
   </main>
 
@@ -293,6 +296,9 @@
 
     /* ---------- 계정(닉네임) / 포인트 / 경험치 ---------- */
     const PKEY = 'vocab-profiles', CKEY = 'vocab-current';
+    // 친구들과 함께 보는 랭킹 서버 주소 (Firebase Realtime Database).
+    // 비워 두면 이 브라우저 안에서만 랭킹이 나와요.
+    const DB_URL = '';
     const EXP_PER_STAGE = 700;
     const STAGES = [
       { name: '1단계 · 알',       img: 'images/stage1.png' },
@@ -319,11 +325,37 @@
 
     function addPoints(n) { me().points += n; save(); renderMe(); }
 
+    function newId() {
+      return (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random().toString(36).slice(2);
+    }
+
+    /* ---------- 서버 랭킹 (Firebase REST) ---------- */
+    const rkey = (nick) => encodeURIComponent(nick.toLowerCase()).replace(/\./g, '%2E');
+    const dbUrl = (path) => DB_URL.replace(/\/+$/, '') + '/' + path + '.json';
+
+    async function remoteGet(path) {
+      const res = await fetch(dbUrl(path), { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+    async function pushRank() {
+      if (!DB_URL || !user) return false;
+      try {
+        const p = me();
+        if (!p.id) p.id = newId();
+        const res = await fetch(dbUrl('ranking/' + rkey(user)), {
+          method: 'PUT',
+          body: JSON.stringify({ name: user, exp: p.exp, owner: p.id, t: Date.now() }),
+        });
+        return res.ok;
+      } catch { return false; }
+    }
+
     function addExp(n) {
       const before = stageOf(me().exp);
       me().exp += n;
       const after = stageOf(me().exp);
-      save(); renderMe();
+      save(); renderMe(); pushRank();
       if (after > before) toast('성장했어요! ' + STAGES[after].name + ' 🎉');
     }
 
@@ -356,17 +388,32 @@
       $('nick').focus();
     }
 
-    function login(nick) {
+    async function login(nick) {
       nick = nick.trim().replace(/\s+/g, ' ');
       if (!nick) return;
       // 대소문자만 다른 닉네임은 같은 계정으로 취급
       const existing = Object.keys(profiles).find(n => n.toLowerCase() === nick.toLowerCase());
+      let id = existing && profiles[existing].id;
+      if (!existing) {
+        id = newId();
+        if (DB_URL) {
+          try {
+            const taken = await remoteGet('ranking/' + rkey(nick));
+            if (taken && taken.owner !== id) {
+              $('loginErr').textContent = '이미 다른 친구가 쓰고 있는 닉네임이에요. 다른 닉네임을 써 주세요.';
+              return;
+            }
+          } catch { /* 서버에 못 닿으면 일단 진행해요 */ }
+        }
+      }
       if (existing) nick = existing;
-      else profiles[nick] = { points: 0, exp: 0 };
+      else profiles[nick] = { points: 0, exp: 0, id };
+      if (!profiles[nick].id) profiles[nick].id = id || newId();
       user = nick;
       save();
       $('login').classList.remove('on');
       renderMe(); renderShop(); renderRank();
+      pushRank();
       toast(existing ? nick + '님 다시 오셨네요!' : nick + '님 환영해요!');
     }
 
@@ -422,19 +469,40 @@
     }
 
     /* ---------- 랭킹 ---------- */
-    function renderRank() {
+    let rankSeq = 0;
+    async function renderRank() {
+      const seq = ++rankSeq;
+      // 이 브라우저의 계정
+      let rows = Object.entries(profiles).map(([name, p]) => ({ name, exp: p.exp, mine: name === user }));
+      let scope = '이 브라우저의 계정', note = '같은 브라우저에서 만든 닉네임끼리 순위가 나와요.';
+
+      if (DB_URL) {
+        if (user) await pushRank();                       // 내 점수를 먼저 올려요
+        try {
+          const all = (await remoteGet('ranking')) || {};
+          rows = Object.values(all)
+            .filter(v => v && typeof v.name === 'string' && Number.isFinite(v.exp))
+            .map(v => ({ name: v.name, exp: v.exp, mine: !!user && v.owner === me().id }));
+          scope = '모두 함께'; note = '친구들의 점수가 함께 나와요. 새로 보려면 새로고침을 눌러요.';
+        } catch {
+          note = '서버에 연결하지 못해서 이 브라우저의 계정만 보여요.';
+        }
+      }
+      if (seq !== rankSeq) return;                         // 더 새로운 요청이 있으면 버려요
+
+      $('rankScope').textContent = scope;
+      $('rankNote').textContent = note;
       const ol = $('rankList');
       ol.innerHTML = '';
-      const rows = Object.entries(profiles).sort((a, b) => b[1].exp - a[1].exp || a[0].localeCompare(b[0]));
+      rows.sort((a, b) => b.exp - a.exp || a.name.localeCompare(b.name));
       if (!rows.length) { ol.innerHTML = '<li class="empty" style="display:block">아직 아무도 없어요.</li>'; return; }
-      rows.forEach(([name, p], i) => {
+      rows.forEach((r, i) => {
         const li = document.createElement('li');
-        if (name === user) li.className = 'me-row';
-        const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
+        if (r.mine) li.className = 'me-row';
         li.innerHTML = '<span class="no"></span><span class="nm"></span><span class="ex"></span>';
-        li.querySelector('.no').textContent = medal;
-        li.querySelector('.nm').textContent = name + (name === user ? ' (나)' : '');
-        li.querySelector('.ex').textContent = p.exp + ' exp';
+        li.querySelector('.no').textContent = ['🥇', '🥈', '🥉'][i] || (i + 1);
+        li.querySelector('.nm').textContent = r.name + (r.mine ? ' (나)' : '');
+        li.querySelector('.ex').textContent = r.exp + ' exp';
         ol.append(li);
       });
     }
@@ -473,7 +541,9 @@
             if (!p || !Number.isFinite(p.points) || !Number.isFinite(p.exp)) continue;
             const mine = profiles[n];
             // 같은 닉네임이면 더 많이 모은 쪽을 남겨요
-            profiles[n] = mine ? { points: Math.max(mine.points, p.points), exp: Math.max(mine.exp, p.exp) } : { points: p.points, exp: p.exp };
+            profiles[n] = mine
+              ? { ...mine, points: Math.max(mine.points, p.points), exp: Math.max(mine.exp, p.exp), id: mine.id || p.id || newId() }
+              : { points: p.points, exp: p.exp, id: p.id || newId() };
           }
           renderMe(); renderRank();
         }
@@ -648,6 +718,7 @@
       $('nextBtn').onclick = nextQuestion;
     }
 
+    $('rankRefresh').onclick = renderRank;
     renderList();
     renderMe();
     route();
