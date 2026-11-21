@@ -29,14 +29,56 @@
     nav {
       position: sticky; top: 0; z-index: 5;
       max-width: 640px; margin: 0 auto;
-      display: flex; gap: 6px; justify-content: center;
-      padding: 16px 0;
+      display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+      padding: 14px 0 8px;
     }
     nav a {
       color: #dbeafe; text-decoration: none; font-weight: 700;
-      padding: 10px 18px; border-radius: 999px;
+      padding: 9px 14px; border-radius: 999px;
       background: rgba(255,255,255,.08);
     }
+    .me {
+      max-width: 640px; margin: 0 auto 14px;
+      display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: center; align-items: center;
+      color: #dbeafe; font-size: .95rem;
+    }
+    .me b { color: #fff; }
+    .me button { padding: 4px 10px; font-size: .85rem; background: rgba(255,255,255,.15); }
+
+    /* 로그인 */
+    #login {
+      position: fixed; inset: 0; z-index: 20;
+      background: linear-gradient(160deg, var(--bg), var(--bg2));
+      display: none; place-items: center; padding: 16px;
+    }
+    #login.on { display: grid; }
+    #login .box { width: 100%; max-width: 420px; text-align: center; }
+    #login h1 { margin: 0 0 24px; }
+    #login form { display: grid; gap: 10px; }
+    #login .hint { color: #bfdbfe; font-size: .9rem; margin-top: 12px; }
+    #login .err { color: #fecaca; min-height: 1.4em; margin-top: 8px; }
+    #login .known { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 14px; }
+    #login .known button { background: rgba(255,255,255,.15); padding: 6px 12px; }
+
+    /* 알 / 상점 */
+    .egg { text-align: center; }
+    .egg img { width: min(260px, 70%); height: 220px; object-fit: contain; border-radius: 14px; }
+    .egg .stage { font-weight: 800; font-size: 1.2rem; margin: 8px 0 2px; }
+    .bar { height: 14px; background: var(--line); border-radius: 999px; overflow: hidden; margin: 10px 0 6px; }
+    .bar > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #60a5fa, var(--accent)); transition: width .4s; }
+    .potions { display: grid; gap: 10px; }
+    .potion { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; padding: 12px 14px; border: 1.5px solid var(--line); border-radius: 12px; }
+    .potion .n { font-weight: 700; }
+    .potion .d { color: var(--muted); font-size: .9rem; }
+    .potion button:disabled { background: #cbd5e1; cursor: not-allowed; filter: none; }
+
+    /* 랭킹 */
+    ol.rank { list-style: none; padding: 0; }
+    ol.rank li { display: grid; grid-template-columns: 2.2em 1fr auto; gap: 8px; }
+    ol.rank li.me-row { background: #eff6ff; border-radius: 10px; }
+    ol.rank .no { font-weight: 800; color: var(--accent); text-align: center; }
+    ol.rank .nm { font-weight: 700; word-break: break-word; }
+    ol.rank .ex { color: #334155; font-variant-numeric: tabular-nums; }
     nav a:hover { background: rgba(255,255,255,.18); color: #fff; }
     nav a.on { background: #fff; color: var(--accent); }
 
@@ -118,7 +160,25 @@
     <a href="#add" data-page="add">추가</a>
     <a href="#list" data-page="list">단어장</a>
     <a href="#quiz" data-page="quiz">퀴즈</a>
+    <a href="#shop" data-page="shop">상점</a>
+    <a href="#rank" data-page="rank">랭킹</a>
   </nav>
+  <div class="me" id="me"></div>
+
+  <!-- 로그인 (닉네임 설정) -->
+  <div id="login">
+    <div class="box">
+      <h1>Vocab. App</h1>
+      <form id="loginForm" class="card" style="display:grid;gap:10px;text-align:left">
+        <h2 style="margin:0">닉네임을 정해 주세요</h2>
+        <input id="nick" maxlength="12" placeholder="닉네임 (1~12글자)" required autocomplete="off">
+        <button type="submit">시작하기</button>
+        <div class="err" id="loginErr" style="color:#dc2626;min-height:1.2em;margin:0"></div>
+      </form>
+      <div class="known" id="known"></div>
+      <p class="hint">이미 만든 닉네임을 쓰면 그 계정으로 로그인돼요. 비밀번호는 없어요.</p>
+    </div>
+  </div>
 
   <!-- 처음 페이지: 이름 + 저장 -->
   <main class="page" id="page-home">
@@ -164,6 +224,31 @@
     </section>
   </main>
 
+  <!-- 상점 + 내 알 -->
+  <main class="page" id="page-shop">
+    <section class="card egg">
+      <h2 style="justify-content:center">내 알</h2>
+      <img id="eggImg" alt="내 알">
+      <div class="stage" id="eggStage"></div>
+      <div class="bar"><i id="eggBar"></i></div>
+      <div class="note" id="eggText" style="margin-top:0"></div>
+    </section>
+    <section class="card">
+      <h2>상점 <small id="shopPoints"></small></h2>
+      <div class="potions" id="potions"></div>
+      <p class="note">퀴즈를 하나 맞힐 때마다 1포인트를 받아요. 물약을 사면 바로 알에게 줘요.</p>
+    </section>
+  </main>
+
+  <!-- 랭킹 -->
+  <main class="page" id="page-rank">
+    <section class="card">
+      <h2>경험치 랭킹 <small>이 브라우저의 계정</small></h2>
+      <ol class="rank" id="rankList"></ol>
+      <p class="note">같은 브라우저에서 만든 닉네임끼리 순위가 나와요.</p>
+    </section>
+  </main>
+
   <div class="toast" id="toast"></div>
 
   <script>
@@ -177,9 +262,11 @@
     /* ---------- 페이지 이동 ---------- */
     function route() {
       const name = location.hash.slice(1);
-      const page = ['add', 'list', 'quiz'].includes(name) ? name : 'home';
+      const page = ['add', 'list', 'quiz', 'shop', 'rank'].includes(name) ? name : 'home';
       document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'page-' + page));
       document.querySelectorAll('nav a').forEach(a => a.classList.toggle('on', a.dataset.page === page));
+      if (page === 'shop') renderShop();
+      if (page === 'rank') renderRank();
       if (page === 'add') $('word').focus();
       if (page === 'quiz') { if (!current || !words.includes(current)) nextQuestion(); else $('answer') && $('answer').focus(); }
     }
@@ -196,10 +283,160 @@
     function save(showMsg) {
       try {
         localStorage.setItem(KEY, JSON.stringify(words));
+        localStorage.setItem(PKEY, JSON.stringify(profiles));
+        if (user) localStorage.setItem(CKEY, user);
         if (showMsg) toast('저장했어요 ✓');
       } catch {
         if (showMsg) toast('이 브라우저에서는 저장이 안 돼요. 파일로 내보내 주세요.');
       }
+    }
+
+    /* ---------- 계정(닉네임) / 포인트 / 경험치 ---------- */
+    const PKEY = 'vocab-profiles', CKEY = 'vocab-current';
+    const EXP_PER_STAGE = 700;
+    const STAGES = [
+      { name: '1단계 · 알',       img: 'images/stage1.png' },
+      { name: '2단계 · 새끼 새',  img: 'images/stage2.png' },
+      { name: '3단계 · 매',       img: 'images/stage3.png' },
+    ];
+    const POTIONS = [
+      { name: '경험치 물약',      cost: 2,  exp: 10, emoji: '🧪' },
+      { name: '중간 경험치 물약', cost: 4,  exp: 25, emoji: '⚗️' },
+      { name: '거대 경험치 물약', cost: 10, exp: 60, emoji: '🍾' },
+    ];
+    let profiles = loadProfiles();
+    let user = null;
+    try { const c = localStorage.getItem(CKEY); if (c && profiles[c]) user = c; } catch {}
+
+    function loadProfiles() {
+      try {
+        const p = JSON.parse(localStorage.getItem(PKEY));
+        return p && typeof p === 'object' && !Array.isArray(p) ? p : {};
+      } catch { return {}; }
+    }
+    const me = () => profiles[user];
+    const stageOf = (exp) => Math.min(STAGES.length - 1, Math.floor(exp / EXP_PER_STAGE));
+
+    function addPoints(n) { me().points += n; save(); renderMe(); }
+
+    function addExp(n) {
+      const before = stageOf(me().exp);
+      me().exp += n;
+      const after = stageOf(me().exp);
+      save(); renderMe();
+      if (after > before) toast('성장했어요! ' + STAGES[after].name + ' 🎉');
+    }
+
+    function renderMe() {
+      const el = $('me');
+      if (!user) { el.innerHTML = ''; return; }
+      el.innerHTML = '';
+      const add = (html) => { const s = document.createElement('span'); s.innerHTML = html; el.append(s); return s; };
+      const nameSpan = add('👤 <b></b>');
+      nameSpan.querySelector('b').textContent = user;
+      add('포인트 <b>' + me().points + '</b>P');
+      add('경험치 <b>' + me().exp + '</b>exp');
+      const out = document.createElement('button');
+      out.textContent = '로그아웃';
+      out.onclick = logout;
+      el.append(out);
+    }
+
+    function showLogin() {
+      $('login').classList.add('on');
+      $('loginErr').textContent = '';
+      const known = $('known');
+      known.innerHTML = '';
+      Object.keys(profiles).forEach(n => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.textContent = n;
+        b.onclick = () => login(n);
+        known.append(b);
+      });
+      $('nick').focus();
+    }
+
+    function login(nick) {
+      nick = nick.trim().replace(/\s+/g, ' ');
+      if (!nick) return;
+      // 대소문자만 다른 닉네임은 같은 계정으로 취급
+      const existing = Object.keys(profiles).find(n => n.toLowerCase() === nick.toLowerCase());
+      if (existing) nick = existing;
+      else profiles[nick] = { points: 0, exp: 0 };
+      user = nick;
+      save();
+      $('login').classList.remove('on');
+      renderMe(); renderShop(); renderRank();
+      toast(existing ? nick + '님 다시 오셨네요!' : nick + '님 환영해요!');
+    }
+
+    function logout() {
+      user = null;
+      try { localStorage.removeItem(CKEY); } catch {}
+      renderMe();
+      showLogin();
+    }
+
+    $('loginForm').onsubmit = (e) => {
+      e.preventDefault();
+      const nick = $('nick').value.trim();
+      if (!nick) { $('loginErr').textContent = '닉네임을 입력해 주세요.'; return; }
+      login(nick);
+      $('nick').value = '';
+    };
+
+    /* ---------- 상점 / 알 ---------- */
+    function renderShop() {
+      if (!user) return;
+      const exp = me().exp, st = stageOf(exp), last = st === STAGES.length - 1;
+      $('eggImg').src = STAGES[st].img;
+      $('eggStage').textContent = STAGES[st].name;
+      const into = last ? EXP_PER_STAGE : exp - st * EXP_PER_STAGE;
+      $('eggBar').style.width = Math.min(100, into / EXP_PER_STAGE * 100) + '%';
+      $('eggText').textContent = last
+        ? `최종 단계예요! 총 ${exp}exp`
+        : `다음 성장까지 ${EXP_PER_STAGE - into}exp 남았어요 (${into} / ${EXP_PER_STAGE}) · 총 ${exp}exp`;
+      $('shopPoints').textContent = '내 포인트 ' + me().points + 'P';
+
+      const box = $('potions');
+      box.innerHTML = '';
+      POTIONS.forEach(p => {
+        const row = document.createElement('div'); row.className = 'potion';
+        const info = document.createElement('div');
+        info.innerHTML = '<div class="n"></div><div class="d"></div>';
+        info.querySelector('.n').textContent = p.emoji + ' ' + p.name;
+        info.querySelector('.d').textContent = `${p.cost}포인트 → 경험치 +${p.exp}`;
+        const buy = document.createElement('button');
+        buy.textContent = '구매';
+        buy.disabled = me().points < p.cost;
+        buy.onclick = () => {
+          if (me().points < p.cost) return toast('포인트가 부족해요');
+          me().points -= p.cost;
+          addExp(p.exp);
+          renderShop();
+          toast(`${p.name}을 먹였어요! +${p.exp}exp`);
+        };
+        row.append(info, buy);
+        box.append(row);
+      });
+    }
+
+    /* ---------- 랭킹 ---------- */
+    function renderRank() {
+      const ol = $('rankList');
+      ol.innerHTML = '';
+      const rows = Object.entries(profiles).sort((a, b) => b[1].exp - a[1].exp || a[0].localeCompare(b[0]));
+      if (!rows.length) { ol.innerHTML = '<li class="empty" style="display:block">아직 아무도 없어요.</li>'; return; }
+      rows.forEach(([name, p], i) => {
+        const li = document.createElement('li');
+        if (name === user) li.className = 'me-row';
+        const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
+        li.innerHTML = '<span class="no"></span><span class="nm"></span><span class="ex"></span>';
+        li.querySelector('.no').textContent = medal;
+        li.querySelector('.nm').textContent = name + (name === user ? ' (나)' : '');
+        li.querySelector('.ex').textContent = p.exp + ' exp';
+        ol.append(li);
+      });
     }
 
     function toast(msg) {
@@ -213,7 +450,7 @@
     $('saveBtn').onclick = () => save(true);
 
     $('exportBtn').onclick = () => {
-      const blob = new Blob([JSON.stringify(words, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify({ words, profiles }, null, 2)], { type: 'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = '단어장.json';
@@ -226,10 +463,20 @@
       const file = e.target.files[0];
       if (!file) return;
       try {
-        const data = JSON.parse(await file.text());
+        const raw = JSON.parse(await file.text());
+        const data = Array.isArray(raw) ? raw : raw.words;   // 예전 파일(목록만)도 읽어요
         const valid = data.filter(x => x && typeof x.word === 'string' && typeof x.meaning === 'string');
         if (!valid.length) throw new Error();
         words = valid;
+        if (!Array.isArray(raw) && raw.profiles && typeof raw.profiles === 'object') {
+          for (const [n, p] of Object.entries(raw.profiles)) {
+            if (!p || !Number.isFinite(p.points) || !Number.isFinite(p.exp)) continue;
+            const mine = profiles[n];
+            // 같은 닉네임이면 더 많이 모은 쪽을 남겨요
+            profiles[n] = mine ? { points: Math.max(mine.points, p.points), exp: Math.max(mine.exp, p.exp) } : { points: p.points, exp: p.exp };
+          }
+          renderMe(); renderRank();
+        }
         save();
         current = null;
         renderList();
@@ -374,11 +621,11 @@
         const verdict = judge(val, current.meaning);
         answered = true;
         score.total++; counted = true;
-        if (verdict) score.right++;
+        if (verdict) { score.right++; addPoints(1); }
         if (verdict === 'exact') {
-          r.className = 'result good'; r.textContent = '정답이에요! 🎉';
+          r.className = 'result good'; r.textContent = '정답이에요! 🎉 +1포인트';
         } else if (verdict === 'similar') {
-          r.className = 'result good'; r.textContent = `비슷한 뜻이라 정답이에요! 🎉 (단어장 뜻: ${current.meaning})`;
+          r.className = 'result good'; r.textContent = `비슷한 뜻이라 정답이에요! 🎉 +1포인트 (단어장 뜻: ${current.meaning})`;
         } else {
           r.className = 'result bad'; r.textContent = '아쉬워요. 단어장 뜻: ' + current.meaning;
           $('overrideBtn').hidden = false;
@@ -387,8 +634,8 @@
         if (verdict) setTimeout(() => { if (current && $('result') === r) nextQuestion(); }, 1300);
       };
       $('overrideBtn').onclick = () => {
-        score.right++;
-        r.className = 'result good'; r.textContent = '정답으로 했어요 👍';
+        score.right++; addPoints(1);
+        r.className = 'result good'; r.textContent = '정답으로 했어요 👍 +1포인트';
         $('overrideBtn').hidden = true;
         updateScore();
         setTimeout(() => { if ($('result') === r) nextQuestion(); }, 900);
@@ -402,7 +649,9 @@
     }
 
     renderList();
+    renderMe();
     route();
+    if (!user) showLogin();
   </script>
 </body>
 </html>
